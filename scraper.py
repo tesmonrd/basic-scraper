@@ -124,20 +124,26 @@ def extract_score_data(elem):
     return data
 
 
-if __name__ == '__main__':
+def generate_results(test=False):
     kwargs = {
         'Inspection_Start': '2/1/2015',
         'Inspection_End': '2/1/2016',
         'Zip_Code': '98103',
     }
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        data, encoding_type = load_inspection_page('inspection_page.html')
+        data, encoding = load_inspection_page('inspection_page.html')
     else:
-        data, encoding_type = get_inspection_page(**kwargs)
-    doc = parse_source(data, encoding_type)
+        data, encoding = get_inspection_page(**kwargs)
+    doc = parse_source(data, encoding)
     listings = extract_data_listings(doc)
     for listing in listings[:5]:
         metadata = extract_restaurant_metadata(listings)
-        # inspection_rows = listing.find_all(is_inspection_row)
         score_data = extract_score_data(listings)
-        print(score_data)
+        metadata.update(score_data)
+        yield metadata
+
+
+if __name__ == '__main__':
+    test = len(sys.argv) > 1 and sys.argv[1] == 'test'
+    for result in generate_results(test):
+        print(result)
