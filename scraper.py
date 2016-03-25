@@ -4,6 +4,9 @@ import requests
 import io
 import sys
 import re
+import json
+from pprint import pprint
+import geocoder
 
 
 INSPECTION_DOMAIN = 'http://info.kingcounty.gov'
@@ -124,7 +127,7 @@ def extract_score_data(elem):
     return data
 
 
-def generate_results(test=False):
+def generate_results(test=False, count=10):
     kwargs = {
         'Inspection_Start': '2/1/2015',
         'Inspection_End': '2/1/2016',
@@ -136,14 +139,42 @@ def generate_results(test=False):
         data, encoding = get_inspection_page(**kwargs)
     doc = parse_source(data, encoding)
     listings = extract_data_listings(doc)
-    for listing in listings[:5]:
+    for listing in listings[:count]:
         metadata = extract_restaurant_metadata(listings)
         score_data = extract_score_data(listings)
         metadata.update(score_data)
         yield metadata
 
 
+def get_geojson(result):
+    address = " ".join(result.get('Address', ''))
+    if not address:
+        return None
+    geocoded = geocoder.google(address)
+    geojson = geocoded.geojson
+    inspection_data = {}
+    use_keys = (
+        'Business Name', 'Average Score', 'Total Inspections', 'High Score',
+        'Address',
+    )
+    for key, val in result.items():
+        if key not in use_keys:
+            continue
+        if isinstance(val, list):
+            val = " ".join(val)
+        inspection_data[key] = val
+    new_address = geojson['properties'].get('address')
+    if new_address:
+        inspection_data['Address'] = new_address
+    geojson['properties'] = inspection_data
+    return geojson
+
 if __name__ == '__main__':
     test = len(sys.argv) > 1 and sys.argv[1] == 'test'
+    total_result = {'type': 'FeatureCollection', 'features': []}
     for result in generate_results(test):
-        print(result)
+        geo_result = get_geojson(result)
+        pprint.pprint(geo_result)
+        total_result['features'].append(geo_result)
+    with open('my_map.json', 'w') as fh:
+        json.dump(total_result, fh)
